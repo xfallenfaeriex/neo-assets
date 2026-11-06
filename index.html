@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neo Assets</title>
+<style>
+  :root {
+    --bg: #f6f4fb; --card: #ffffff; --text: #2a2540; --muted: #6b6585;
+    --accent: #6a5acd; --accent-text: #ffffff; --border: #e2ddf0; --ok: #2e8b57;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1b1826; --card: #262236; --text: #ece9f7; --muted: #a49fbd;
+      --accent: #9d8cff; --accent-text: #1b1826; --border: #3a3550; --ok: #6fd39b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 24px 16px 8px; max-width: 1100px; margin: 0 auto; }
+  h1 { margin: 0 0 4px; font-size: 24px; }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+  #search { width: 100%; max-width: 420px; padding: 10px 12px; font-size: 15px;
+            border: 1px solid var(--border); border-radius: 8px;
+            background: var(--card); color: var(--text); }
+  main { max-width: 1100px; margin: 0 auto; padding: 8px 16px 40px;
+         display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+          padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .thumb { height: 140px; display: flex; align-items: center; justify-content: center;
+           background: repeating-conic-gradient(#8881 0 25%, transparent 0 50%) 0 0 / 16px 16px;
+           border-radius: 6px; overflow: hidden; }
+  .thumb img { max-width: 100%; max-height: 100%; }
+  .name { font-size: 13px; word-break: break-all; }
+  button { border: 0; border-radius: 6px; padding: 8px; font-size: 14px; cursor: pointer;
+           background: var(--accent); color: var(--accent-text); font-weight: 600; }
+  button.done { background: var(--ok); }
+  .row { display: flex; gap: 6px; }
+  .row button { flex: 1; }
+  button.alt { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  #status { grid-column: 1 / -1; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Neo Assets</h1>
+  <p class="sub">Click a button to copy that image's link, ready to paste into Neopets.</p>
+  <input id="search" type="search" placeholder="Search by file name…" autocomplete="off">
+</header>
+<main id="grid"><p id="status">Loading images…</p></main>
+
+<script>
+const USER = "magsloveswolves", REPO = "neo-assets", BRANCH = "main";
+const BASE = `https://${USER}.github.io/${REPO}/`;
+const IMG = /\.(png|jpe?g|gif|webp|svg)$/i;
+const grid = document.getElementById("grid");
+const search = document.getElementById("search");
+let files = [];
+
+function pageUrl(path) {
+  return BASE + path.split("/").map(encodeURIComponent).join("/");
+}
+
+async function copy(text, btn, label) {
+  try { await navigator.clipboard.writeText(text); }
+  catch (e) {
+    const t = document.createElement("textarea");
+    t.value = text; document.body.appendChild(t); t.select();
+    document.execCommand("copy"); t.remove();
+  }
+  btn.textContent = "Copied!"; btn.classList.add("done");
+  setTimeout(() => { btn.textContent = label; btn.classList.remove("done"); }, 1500);
+}
+
+function render() {
+  const q = search.value.trim().toLowerCase();
+  const shown = files.filter(f => f.toLowerCase().includes(q));
+  grid.innerHTML = "";
+  if (!shown.length) {
+    grid.innerHTML = `<p id="status">${files.length ? "No matches." : "No images in the repo yet."}</p>`;
+    return;
+  }
+  for (const path of shown) {
+    const url = pageUrl(path);
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="thumb"><img loading="lazy" alt=""></div>
+      <div class="name"></div>
+      <div class="row">
+        <button class="link">Copy link</button>
+        <button class="tag alt">Copy &lt;img&gt;</button>
+      </div>`;
+    card.querySelector("img").src = url;
+    card.querySelector(".name").textContent = path;
+    card.querySelector(".link").onclick = e => copy(url, e.target, "Copy link");
+    card.querySelector(".tag").onclick = e => copy(`<img src="${url}">`, e.target, "Copy <img>");
+    grid.appendChild(card);
+  }
+}
+
+fetch(`https://api.github.com/repos/${USER}/${REPO}/git/trees/${BRANCH}?recursive=1`)
+  .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then(data => {
+    files = data.tree.filter(t => t.type === "blob" && IMG.test(t.path))
+                     .map(t => t.path)
+                     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    render();
+  })
+  .catch(() => {
+    grid.innerHTML = `<p id="status">Couldn't load the image list right now. Refresh in a minute.</p>`;
+  });
+
+search.addEventListener("input", render);
+</script>
+</body>
+</html>
